@@ -10,49 +10,39 @@ using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Util.Store;
+using Microsoft.Extensions.Options;
 
 namespace GoogleOAuthCliClient
 {
 	/// <summary>
 	/// Class that does an OAuth 2.0 authorization against Google for console applications. This was adapted from https://github.com/googlesamples/oauth-apps-for-windows/tree/master/OAuthConsoleApp.
 	/// </summary>
-	public class OAuthChecker
+	public class OAuthChecker : IOAuthChecker
 	{
-		public string AccessToken { get; set; }
-		private static ClientSecret s_ClientSecret;
-		private static string OAuthTokenPath
-		{
-			get
-			{
-				return $"{AppDataFolder}\\oauth.json";
-			}
-		}
-		private static string ClientSecretPath
-		{
-			get
-			{
-				return $"{AppDataFolder}\\client_secret.json";
-			}
-		}
-		private static string AppDataFolder
-		{
-			get
-			{
-				return $"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}\\{nameof(OAuthChecker)}";
-			}
-		}
+		private static Lazy<ClientSecret> s_ClientSecret;
+		private ClientSecret Secret { get => s_ClientSecret.Value; }
+		private readonly OAuthCheckerOptions _options;
 
-		static OAuthChecker()
+		public string AccessToken { get; set; }
+		private string OAuthTokenPath => $"{AppDataFolder}\\{_options.OAuthTokenFilename}";
+		private string ClientSecretPath => $"{AppDataFolder}\\{_options.ClientSecretJsonFilename}";
+		private string AppDataFolder => _options.Path;
+
+		public OAuthChecker(IOptions<OAuthCheckerOptions> options)
 		{
-			if (File.Exists(ClientSecretPath))
+			_options = options.Value;
+			s_ClientSecret = new Lazy<ClientSecret>(() =>
 			{
+				if (!File.Exists(ClientSecretPath))
+					throw new InvalidOperationException("No client secrets file found!");
+
 				using (FileStream stream = new FileStream($"{ClientSecretPath}", FileMode.Open, FileAccess.Read))
 				using (StreamReader reader = new StreamReader(stream))
 				{
 					string json = reader.ReadToEnd();
-					s_ClientSecret = JsonConvert.DeserializeObject<ClientSecret>(json);
+					return JsonConvert.DeserializeObject<ClientSecret>(json);
 				}
-			}
+			});
 		}
 
 		/// <summary>
@@ -81,8 +71,8 @@ namespace GoogleOAuthCliClient
 						}
 
 						// try to refresh the access token
-						string requestBody = $"client_id={s_ClientSecret.installed.client_id}&client_secret={s_ClientSecret.installed.client_secret}&refresh_token={oauth.refresh_token}&grant_type=refresh_token";
-						OAuthResponse response = await DoTokenRequest(s_ClientSecret.installed.token_uri, requestBody);
+						string requestBody = $"client_id={Secret.installed.client_id}&client_secret={Secret.installed.client_secret}&refresh_token={oauth.refresh_token}&grant_type=refresh_token";
+						OAuthResponse response = await DoTokenRequest(Secret.installed.token_uri, requestBody);
 
 						oauth.access_token = response.access_token;
 						oauth.expiration = response.expiration;
@@ -144,9 +134,9 @@ namespace GoogleOAuthCliClient
 
 			// Creates the OAuth 2.0 authorization request.
 			string authorizationRequest = string.Format("{0}?response_type=code&scope=openid%20profile&redirect_uri={1}&client_id={2}&state={3}&code_challenge={4}&code_challenge_method={5}",
-				s_ClientSecret.installed.auth_uri,
+				Secret.installed.auth_uri,
 				Uri.EscapeDataString(redirectURI),
-				s_ClientSecret.installed.client_id,
+				Secret.installed.client_id,
 				state,
 				code_challenge,
 				code_challenge_method);
@@ -210,13 +200,13 @@ namespace GoogleOAuthCliClient
 			output("Exchanging code for tokens...");
 
 			// builds the  request
-			string tokenRequestURI = s_ClientSecret.installed.token_uri;
+			string tokenRequestURI = Secret.installed.token_uri;
 			string tokenRequestBody = string.Format("code={0}&redirect_uri={1}&client_id={2}&code_verifier={3}&client_secret={4}&scope=&grant_type=authorization_code",
 				code,
 				System.Uri.EscapeDataString(redirectURI),
-				s_ClientSecret.installed.client_id,
+				Secret.installed.client_id,
 				code_verifier,
-				s_ClientSecret.installed.client_secret
+				Secret.installed.client_secret
 				);
 
 			// sends the request

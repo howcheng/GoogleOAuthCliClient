@@ -13,7 +13,8 @@ namespace Microsoft.Extensions.DependencyInjection
 			if (configureAction != null)
 				configureAction(options);
 
-			return services.AddSingleton(Options.Options.Create(options));
+			return services.AddSingleton(Options.Options.Create(options))
+				.AddSingleton<IOAuthChecker, OAuthChecker>();
 		}
 	}
 }

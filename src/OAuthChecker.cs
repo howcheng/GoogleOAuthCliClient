@@ -11,6 +11,8 @@ using System.Runtime.InteropServices;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Util.Store;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
+using System.Linq;
 
 namespace GoogleOAuthCliClient
 {
@@ -26,7 +28,7 @@ namespace GoogleOAuthCliClient
 		public string AccessToken { get; set; }
 		private string OAuthTokenPath => $"{AppDataFolder}\\{_options.OAuthTokenFilename}";
 		private string ClientSecretPath => $"{AppDataFolder}\\{_options.ClientSecretJsonFilename}";
-		private string AppDataFolder => _options.Path;
+		private string AppDataFolder => _options.SecretsPath;
 
 		public OAuthChecker(IOptions<OAuthCheckerOptions> options)
 		{
@@ -107,7 +109,7 @@ namespace GoogleOAuthCliClient
 			return port;
 		}
 
-		public async void DoOAuth()
+		public async Task DoOAuth()
 		{
 			Console.WriteLine("+-----------------------+");
 			Console.WriteLine("|  Sign in with Google  |");
@@ -133,16 +135,22 @@ namespace GoogleOAuthCliClient
 			http.Start();
 
 			// Creates the OAuth 2.0 authorization request.
-			string authorizationRequest = string.Format("{0}?response_type=code&scope=openid%20profile&redirect_uri={1}&client_id={2}&state={3}&code_challenge={4}&code_challenge_method={5}",
+			string authorizationRequest = string.Format("{0}?response_type=code&scope=openid%20profile{1}&redirect_uri={2}&client_id={3}&state={4}&code_challenge={5}&code_challenge_method={6}",
 				Secret.installed.auth_uri,
+				_options.Scopes.Count > 0 ? $"%20{_options.Scopes.Select(x => System.Web.HttpUtility.UrlEncode(x)).Aggregate((s1, s2) => $"{s1}%20{s2}")}" : string.Empty,
 				Uri.EscapeDataString(redirectURI),
 				Secret.installed.client_id,
 				state,
 				code_challenge,
 				code_challenge_method);
 
+			ProcessStartInfo startInfo = new ProcessStartInfo(_options.BrowserPath);
+			startInfo.Arguments = authorizationRequest;
+			if (!string.IsNullOrEmpty(_options.BrowserArguments))
+				startInfo.Arguments = $"{startInfo.Arguments} {_options.BrowserArguments}";
+
 			// Opens request in the browser.
-			System.Diagnostics.Process.Start(authorizationRequest);
+			Process.Start(startInfo);
 
 			// Waits for the OAuth authorization response.
 			var context = await http.GetContextAsync();
@@ -190,12 +198,13 @@ namespace GoogleOAuthCliClient
 			output("Authorization code: " + code);
 
 			// Starts the code exchange at the Token Endpoint.
-			performCodeExchange(code, code_verifier, redirectURI);
+			await performCodeExchange(code, code_verifier, redirectURI);
 
+			output("Press any key to continue . . .");
 			Console.ReadKey();
 		}
 
-		async void performCodeExchange(string code, string code_verifier, string redirectURI)
+		async Task performCodeExchange(string code, string code_verifier, string redirectURI)
 		{
 			output("Exchanging code for tokens...");
 

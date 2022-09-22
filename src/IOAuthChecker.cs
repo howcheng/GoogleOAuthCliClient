@@ -6,7 +6,7 @@ namespace GoogleOAuthCliClient
 	{
 		string AccessToken { get; set; }
 
-		void DoOAuth();
+		Task DoOAuth();
 		Task<bool> IsOAuthRequired();
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace GoogleOAuthCliClient
 {
@@ -16,11 +17,28 @@ namespace GoogleOAuthCliClient
 		/// Path (relative or absolute) to the location of the <see cref="ClientSecretJsonFilename"/> and <see cref="OAuthTokenFilename"/> files
 		/// (default: %APPDATA%\OAuthChecker)
 		/// </summary>
-		public string Path
+		public string SecretsPath
 		{
-			get => _path;
-			set => _path = value;
+			get => _secretsPath;
+			set => _secretsPath = value;
 		}
-		private string _path = $"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}\\{nameof(OAuthChecker)}";
+		private string _secretsPath = $"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}\\{nameof(OAuthChecker)}";
+
+		/// <summary>
+		/// Path (relative or absolute) to the browser application to open to begin the OAuth transaction. Defaults to Google Chrome (64-bit).
+		/// </summary>
+		public string BrowserPath 
+		{
+			get => _browserPath;
+			set => _browserPath = value;
+		}
+		private string _browserPath = $"{Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)}\\Google\\Chrome\\Application\\chrome.exe";
+
+		/// <summary>
+		/// Any command-line arguments to pass to the browser
+		/// </summary>
+		public string BrowserArguments { get; set; }
+
+		public IList<string> Scopes { get; } = new List<string>();
 	}
 }
